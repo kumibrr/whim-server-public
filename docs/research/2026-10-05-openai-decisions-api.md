@@ -10,6 +10,8 @@ Recommended explicit user decision: provide the exact product link/model/endpoin
 
 Design decision recorded 2026-10-06: the owner approved an explicitly named OpenAI Responses decision adapter, plus independently replaceable OpenAI transcription and structured-extraction starter adapters. This resolves the server's v1 integration choice; it does not establish the existence or identity of a separate Decisions API. No live inference compatibility or account-access checks have been performed.
 
+Scope correction later on 2026-10-06: the owner simplified v1 to OpenAI only. Use transcription followed by a single Responses call for decisions and arguments; the earlier independent-adapter proposal is superseded. The remaining discussion below records research history, not additional v1 architecture requirements.
+
 ## Verified alternatives, subject to that decision
 
 OpenAI documents the [Responses API](https://developers.openai.com/api/reference/python/resources/responses), including `POST /responses`. Its [Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses) documents JSON Schema output through `text.format`, using a supported schema subset. An adapter could ask for a provider-neutral decision object, then validate it locally and handle refusal/incomplete/error outcomes. Schema conformance does not establish that an action is correct or authorized; that last sentence is an application-design inference.

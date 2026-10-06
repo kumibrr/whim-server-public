@@ -1,6 +1,6 @@
 # Whim server
 
-An individually owned server accepts Whim Notes, interprets them through replaceable providers, and carries out the owner's configured Workflow. Its language preserves Whim's capture and Delivery terms while naming server-side processing separately.
+An individually owned server accepts Whim Notes, interprets them using OpenAI, and carries out the owner's configured Workflow. Its language preserves Whim's capture and Delivery terms while naming server-side processing separately.
 
 ## Language
 
@@ -29,8 +29,8 @@ One named behavior in a Workflow.
 _Avoid_: Action
 
 **Provider**:
-A provisioned integration that supplies transcription, decisions, or extraction for a Workflow. These are independent roles, even when one vendor supplies several.
-_Avoid_: Agent when referring only to a decision model
+OpenAI, which supplies transcription and the structured decisions and arguments used by a Workflow.
+_Avoid_: Interchangeable agent backend
 
 **Pipe**:
 A provisioned capability that a Workflow may invoke, such as a destination webhook or configuration change.
