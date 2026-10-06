@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { RequestListener } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { IncomingNote } from './types.ts';
 import type { Settings } from './types.ts';
@@ -13,6 +14,10 @@ export function settings(url = 'http://127.0.0.1:9999/webhook'): Settings {
       options: {folder: 'inbox'}, mutableOptions: ['folder']}}};
 }
 export const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
+export async function readBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks = []; for await (const chunk of req) chunks.push(chunk); return Buffer.concat(chunks);
+}
+export const responsePlan = (value: unknown) => ({status: 'completed', output: [{type: 'message', content: [{type: 'output_text', text: JSON.stringify(value)}]}]});
 export function note(overrides: Record<string, unknown> = {}): IncomingNote {
   const noteId = randomUUID(), attemptId = randomUUID(), audio = Buffer.from([0, 1, 255, 3]);
   const metadata = {schema_version: 1, event: 'note.created', note_id: noteId, attempt_id: attemptId,
