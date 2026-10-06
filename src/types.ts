@@ -54,3 +54,7 @@ export interface Job {
   audio: Uint8Array | null; transcript: string | null; plan: Plan | null;
   nextAt: number; transcriptionAttempts: number; decisionAttempts: number; error: string | null;
 }
+export interface ActionOutcome {
+  index: number; pipeId: string; status: 'pending' | 'in_flight' | 'succeeded' | 'failed' | 'uncertain';
+  revisionId: number | null; error: string | null;
+}
