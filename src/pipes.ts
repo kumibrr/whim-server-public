@@ -61,9 +61,9 @@ export function buildWebhookRequest(action: Action, job: Job, settings: Settings
   }
   return {url: pipe.url, init: {method: pipe.method, headers, ...(pipe.method === 'GET' ? {} : {body}), redirect: 'manual'}};
 }
-export async function sendWebhook(request: {url: string; init: RequestInit}, timeoutMs = 30_000): Promise<void> {
+export async function sendWebhook(request: {url: string; init: RequestInit}, timeoutMs = 30_000, signal?: AbortSignal): Promise<void> {
   let response: Response;
-  try { response = await fetch(request.url, {...request.init, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs)}); }
+  try { response = await fetch(request.url, {...request.init, redirect: 'manual', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)}); }
   catch { throw new DeliveryFailure('Webhook response lost', true); }
   await response.body?.cancel().catch(() => {});
   if (!response.ok) throw new DeliveryFailure(`Webhook HTTP ${response.status}`, false);

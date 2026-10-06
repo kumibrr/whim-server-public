@@ -3,14 +3,14 @@ import type { Store } from './store.ts';
 import { transcribe, decide, validatePlan, ApiFailure } from './openai.ts';
 import { buildWebhookRequest, sendWebhook, DeliveryFailure } from './pipes.ts';
 import { voiceSettings } from './config.ts';
-export async function processNext(store: Store, secrets: Secrets, now: number): Promise<boolean> {
+export async function processNext(store: Store, secrets: Secrets, now: number, signal?: AbortSignal): Promise<boolean> {
   const job = store.claim(now);
   if (!job) return false;
   let stage: 'transcription' | 'decision' | null = null;
   let activeAction: number | null = null;
   try {
     const settings = store.revision(job.revisionId!).settings;
-    const api = {baseUrl: secrets.openaiBaseUrl};
+    const api = {baseUrl: secrets.openaiBaseUrl, signal};
     if (job.transcript === null) {
       stage = 'transcription';
       if (job.transcriptionAttempts >= 3) throw new ApiFailure('Transcription retries exhausted');
@@ -41,7 +41,7 @@ export async function processNext(store: Store, secrets: Secrets, now: number): 
       } else {
         if (outcome.status === 'succeeded') continue;
         activeAction = index; store.beginAction(job.noteId, index);
-        await sendWebhook(requests[index]!);
+        await sendWebhook(requests[index]!, 30_000, signal);
         store.finishAction(job.noteId, index, 'succeeded'); activeAction = null;
       }
     }

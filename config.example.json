@@ -1,0 +1,26 @@
+{
+  "transcriptionModel": "gpt-4o-mini-transcribe",
+  "responsesModel": "gpt-4.1-mini",
+  "instructions": "Send ordinary notes to inbox. Apply configuration changes only when explicitly and unambiguously requested.",
+  "defaultPipeId": "inbox",
+  "pipes": {
+    "inbox": {
+      "description": "Save any note to my inbox",
+      "url": "https://example.com/webhook",
+      "method": "POST",
+      "headers": {},
+      "authHeaders": {},
+      "argsSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false},
+      "body": {
+        "format": "json",
+        "mapping": {
+          "note_id": {"source": "note", "path": "note_id"},
+          "title": {"source": "note", "path": "title"},
+          "text": {"source": "transcript"}
+        }
+      },
+      "options": {},
+      "mutableOptions": []
+    }
+  }
+}

@@ -62,9 +62,11 @@ export class Store {
   claim(now: number): Job | null {
     return this.transaction(() => {
       if (this.db.prepare("SELECT 1 FROM notes WHERE status='running'").get()) return null;
+      const configuration = this.db.prepare('SELECT revision_id FROM active_config WHERE singleton=1').get();
+      if (!configuration) return null;
       const row = this.db.prepare("SELECT note_id FROM notes WHERE status IN ('queued','retrying') AND next_at<=? ORDER BY accepted_at,rowid LIMIT 1").get(now);
       if (!row) return null;
-      this.db.prepare("UPDATE notes SET status='running', revision_id=COALESCE(revision_id,?), updated_at=? WHERE note_id=?").run(this.currentRevision().id, now, row.note_id!);
+      this.db.prepare("UPDATE notes SET status='running', revision_id=COALESCE(revision_id,?), updated_at=? WHERE note_id=?").run(configuration.revision_id!, now, row.note_id!);
       return this.getNote(String(row.note_id));
     });
   }
@@ -128,6 +130,32 @@ export class Store {
       this.db.exec(`UPDATE notes SET status='uncertain',error='Interrupted webhook delivery' WHERE note_id IN (SELECT note_id FROM actions WHERE status='in_flight');
         UPDATE actions SET status='uncertain',error='Interrupted webhook delivery' WHERE status='in_flight';
         UPDATE notes SET status='queued' WHERE status='running';`);
+    });
+  }
+  history(): Revision[] { return this.db.prepare('SELECT id FROM revisions ORDER BY id DESC').all().map(r => this.revision(Number(r.id))); }
+  noteStatus(noteId: string) {
+    const j = this.getNote(noteId);
+    return {noteId: j.noteId, attemptId: j.attemptId, status: j.status, acceptedAt: j.acceptedAt, updatedAt: j.updatedAt,
+      revisionId: j.revisionId, nextAt: j.nextAt, transcriptionAttempts: j.transcriptionAttempts, decisionAttempts: j.decisionAttempts,
+      error: j.error, actions: this.actionOutcomes(noteId)};
+  }
+  retryNote(noteId: string): void {
+    this.transaction(() => {
+      const job = this.getNote(noteId);
+      if (job.status !== 'failed' || !job.audio || this.actionOutcomes(noteId).some(a => a.status === 'uncertain' || a.status === 'in_flight')) throw new Error('Invalid recovery state');
+      this.db.prepare("UPDATE actions SET status='pending',error=NULL,updated_at=? WHERE note_id=? AND status='failed'").run(Date.now(), noteId);
+      this.db.prepare(`UPDATE notes SET status='queued',error=NULL,next_at=0,updated_at=?,
+        transcription_attempts=CASE WHEN transcript IS NULL THEN 0 ELSE transcription_attempts END,
+        decision_attempts=CASE WHEN plan IS NULL THEN 0 ELSE decision_attempts END WHERE note_id=?`).run(Date.now(), noteId);
+    });
+  }
+  resolveAction(noteId: string, index: number, resolution: 'delivered' | 'retry'): void {
+    this.transaction(() => {
+      const job = this.getNote(noteId), action = this.actionOutcomes(noteId)[index];
+      if (job.status !== 'uncertain' || action?.status !== 'uncertain') throw new Error('Invalid recovery state');
+      this.db.prepare('UPDATE actions SET status=?,error=NULL,updated_at=? WHERE note_id=? AND action_index=?').run(
+        resolution === 'delivered' ? 'succeeded' : 'pending', Date.now(), noteId, index);
+      this.db.prepare("UPDATE notes SET status='queued',error=NULL,next_at=0,updated_at=? WHERE note_id=?").run(Date.now(), noteId);
     });
   }
   close(): void { this.db.close(); }

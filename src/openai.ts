@@ -4,7 +4,7 @@ export class ApiFailure extends Error {
   retryable: boolean; retryAfter: number | undefined;
   constructor(code: string, retryable = false, retryAfter?: number) { super(code); this.retryable = retryable; this.retryAfter = retryAfter; }
 }
-export interface ApiOptions {baseUrl?: string; timeoutMs?: number}
+export interface ApiOptions {baseUrl?: string; timeoutMs?: number; signal?: AbortSignal}
 const object = (properties: Record<string, unknown>) => ({type: 'object', properties, required: Object.keys(properties), additionalProperties: false});
 export function planSchema(settings: Settings) {
   const actions = Object.entries(settings.pipes).map(([id, pipe]) => object({pipeId: {type: 'string', enum: [id]}, args: pipe.argsSchema}));
@@ -29,7 +29,7 @@ async function call(path: string, body: BodyInit, key: string, options: ApiOptio
   try {
     const response = await fetch(`${(options.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '')}${path}`, {
       method: 'POST', body, headers: {Authorization: `Bearer ${key}`, ...(json ? {'Content-Type': 'application/json'} : {})},
-      redirect: 'error', signal: AbortSignal.timeout(options.timeoutMs ?? 120_000)});
+      redirect: 'error', signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 120_000)]) : AbortSignal.timeout(options.timeoutMs ?? 120_000)});
     if (!response.ok) {
       const retry = response.headers.get('retry-after');
       const parsed = retry ? (/^\d+$/.test(retry) ? Date.now() + Number(retry) * 1000 : Date.parse(retry)) : NaN;

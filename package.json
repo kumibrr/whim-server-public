@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {"node": ">=24"},
-  "scripts": {"test": "node --test", "check": "tsc --noEmit", "build": "tsc", "start": "node dist/server.js", "cli": "node src/cli.ts"},
+  "scripts": {"test": "node --test", "test:container": "node scripts/container-smoke.ts", "check": "tsc --noEmit", "build": "tsc", "start": "node dist/server.js", "cli": "node src/cli.ts"},
   "dependencies": {"ajv": "^8.17.1"},
   "devDependencies": {"typescript": "^5.9.3", "@types/node": "^24.0.0"}
 }
