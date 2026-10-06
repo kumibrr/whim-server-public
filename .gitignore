@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.superpowers/
+.worktrees/
+*.sqlite
+*.sqlite-*
+.env
+config.local.json
