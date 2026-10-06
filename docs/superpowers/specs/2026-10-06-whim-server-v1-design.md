@@ -2,7 +2,7 @@
 
 Date: 2026-10-06
 
-Status: Revised at the owner's request to simplify the previous design. Awaiting review of this replacement specification.
+Status: Approved by the owner on 2026-10-06. Implementation plan requested.
 
 ## Purpose and shape
 
