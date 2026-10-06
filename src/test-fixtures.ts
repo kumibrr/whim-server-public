@@ -3,6 +3,15 @@ import { createServer } from 'node:http';
 import type { RequestListener } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { IncomingNote } from './types.ts';
+import type { Settings } from './types.ts';
+export function settings(url = 'http://127.0.0.1:9999/webhook'): Settings {
+  return {transcriptionModel: 'gpt-4o-mini-transcribe', responsesModel: 'gpt-4.1-mini',
+    instructions: 'Send notes to inbox unless asked to configure.', defaultPipeId: 'inbox', pipes: {inbox: {
+      description: 'Save a general note', url, method: 'POST', headers: {}, authHeaders: {},
+      argsSchema: {type: 'object', properties: {}, required: [], additionalProperties: false},
+      body: {format: 'json', mapping: {note_id: {source: 'note', path: 'note_id'}, text: {source: 'transcript'}}},
+      options: {folder: 'inbox'}, mutableOptions: ['folder']}}};
+}
 export const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 export function note(overrides: Record<string, unknown> = {}): IncomingNote {
   const noteId = randomUUID(), attemptId = randomUUID(), audio = Buffer.from([0, 1, 255, 3]);
