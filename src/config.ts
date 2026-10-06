@@ -1,7 +1,19 @@
 import { Ajv } from 'ajv';
+import type { ValidateFunction } from 'ajv';
 import { isDeepStrictEqual } from 'node:util';
 import type { Settings, ConfigChange, JsonSchema, Mapping } from './types.ts';
-export const ajv = new Ajv({strict: true, allErrors: false});
+const validators = new Map<string, ValidateFunction>();
+// Each compiled validator owns a scoped Ajv instance; evicted instances can be collected.
+export function compileSchema(schema: object): ValidateFunction {
+  const key = JSON.stringify(schema), cached = validators.get(key);
+  if (cached) { validators.delete(key); validators.set(key, cached); return cached; }
+  const validator = new Ajv({strict: true, allErrors: false}).compile(schema);
+  if (key.length <= 64 * 1024) {
+    validators.set(key, validator);
+    while (validators.size > 16) validators.delete(validators.keys().next().value!);
+  }
+  return validator;
+}
 const fail = (): never => { throw new Error('Invalid settings'); };
 const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const safe = (k: string) => !['__proto__', 'constructor', 'prototype'].includes(k);
@@ -25,7 +37,6 @@ export function strictSchema(value: unknown, depth = 0): JsonSchema {
   if (types.includes('array')) schema.items = strictSchema(schema.items, depth + 1);
   else if (schema.items !== undefined) fail();
   if (schema.enum !== undefined && (!Array.isArray(schema.enum) || !schema.enum.length)) fail();
-  ajv.compile(schema);
   return schema;
 }
 function validMapping(value: unknown, depth = 0): value is Mapping {
@@ -68,9 +79,12 @@ export function validateSettings(value: unknown): Settings {
     if (!Array.isArray(pipe.mutableOptions) || !pipe.mutableOptions.every(k => typeof k === 'string' && Object.hasOwn(pipe.options, k))) fail();
     if (!record(pipe.body) || !keys(pipe.body, ['format', 'mapping']) || !['json', 'text', 'form', 'multipart', 'audio'].includes(pipe.body.format)
       || !validMapping(pipe.body.mapping)) fail();
-    if (pipe.method === 'GET' && pipe.body.format !== 'json') fail();
+    if (pipe.method === 'GET' && (pipe.body.format !== 'json' || !record(pipe.body.mapping)
+      || Object.keys(pipe.body.mapping).length !== 0)) fail();
   }
-  if (!ajv.compile(settings.pipes[settings.defaultPipeId].argsSchema)({})) fail();
+  assertOutputLimits(planSchema(settings));
+  for (const pipe of Object.values(settings.pipes)) compileSchema(pipe.argsSchema);
+  if (!compileSchema(settings.pipes[settings.defaultPipeId].argsSchema)({})) fail();
   return settings;
 }
 export function voicePaths(base: Settings): Record<string, JsonSchema> {
@@ -85,7 +99,7 @@ export function voiceSettings(base: Settings, changes: ConfigChange[]): Settings
   const next = structuredClone(base), paths = voicePaths(base);
   for (const change of changes) {
     if (!record(change) || !keys(change, ['path', 'value']) || !Object.hasOwn(paths, change.path)
-      || !ajv.compile(paths[change.path])(change.value)) fail();
+      || !compileSchema(paths[change.path])(change.value)) fail();
     const parts = change.path.split('.');
     let obj: any = next;
     for (const k of parts.slice(0, -1)) obj = obj[k];
@@ -101,4 +115,34 @@ export function assertVoiceChange(base: Settings, next: Settings): void {
     dest[parts.at(-1)!] = src[parts.at(-1)!];
   }
   if (!isDeepStrictEqual(fixed, base)) fail();
+}
+
+const object = (properties: Record<string, unknown>) => ({type: 'object', properties, required: Object.keys(properties), additionalProperties: false});
+export function planSchema(settings: Settings) {
+  const actions = Object.entries(settings.pipes).map(([id, pipe]) => object({pipeId: {type: 'string', enum: [id]}, args: pipe.argsSchema}));
+  const changes = Object.entries(voicePaths(settings)).map(([path, value]) => object({path: {type: 'string', enum: [path]}, value}));
+  actions.push(object({pipeId: {type: 'string', enum: ['configure']}, args: object({changes: {type: 'array', items: {anyOf: changes}}})}));
+  return object({routing: {type: 'string', enum: ['matched', 'default']}, actions: {type: 'array', items: {anyOf: actions}}});
+}
+function assertOutputLimits(schema: object): void {
+  let properties = 0, enumValues = 0, stringLength = 0;
+  function visit(node: any, depth: number): void {
+    const types = Array.isArray(node.type) ? node.type : [node.type];
+    const nextDepth = depth + (types.includes('object') || types.includes('array') ? 1 : 0);
+    if (nextDepth > 10) fail();
+    if (node.enum) {
+      enumValues += node.enum.length;
+      const chars = node.enum.reduce((sum: number, v: unknown) => sum + (typeof v === 'string' ? v.length : 0), 0);
+      stringLength += chars;
+      if (node.enum.length > 250 && chars > 15_000) fail();
+    }
+    if (node.properties) {
+      properties += Object.keys(node.properties).length;
+      for (const [name, child] of Object.entries(node.properties)) { stringLength += name.length; visit(child, nextDepth); }
+    }
+    if (node.items) visit(node.items, nextDepth);
+    if (node.anyOf) for (const child of node.anyOf) visit(child, depth);
+    if (properties > 5000 || enumValues > 1000 || stringLength > 120_000) fail();
+  }
+  visit(schema, 0);
 }

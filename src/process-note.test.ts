@@ -4,9 +4,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openStore } from './store.ts';
-import { processNext } from './process-note.ts';
+import { processNext as work } from './process-note.ts';
 import { settings, note, listen, readBody, responsePlan } from './test-fixtures.ts';
-import type { Plan } from './types.ts';
+import type { Plan, Secrets } from './types.ts';
+const processNext = (store: ReturnType<typeof openStore>, secrets: Secrets, now: number) => work(store, secrets, now, undefined, () => now);
 const inbox: Plan = {actions: [{pipeId: 'inbox', args: {}}]};
 function saved(store: ReturnType<typeof openStore>, plan = inbox) {
   const n = note(); store.accept(n); store.claim(0); store.saveTranscript(n.noteId, 'saved transcript'); store.savePlan(n.noteId, plan); return n;
@@ -111,5 +112,17 @@ test('invalid later mapping fails the complete plan before any earlier effect', 
     store.activate(s, 0, 'admin'); const n = saved(store, {actions: [{pipeId: 'inbox', args: {}}, {pipeId: 'bad', args: {}}]});
     store.recoverInterrupted(); await processNext(store, {}, 0);
     assert.equal(store.getNote(n.noteId).status, 'failed'); assert.equal(calls, 0);
+  } finally { await http.close(); store.close(); }
+});
+test('a slow provider failure starts its retry backoff at failure time', async t => {
+  let now = 1_000_000;
+  t.mock.method(Date, 'now', () => now);
+  const http = await listen(async (req, res) => { await readBody(req); now += 120_000; res.writeHead(503).end(); });
+  const store = openStore(':memory:');
+  try {
+    store.activate(settings(), 0, 'admin'); const n = note(); store.accept(n);
+    await work(store, {openaiKey: 'key', openaiBaseUrl: http.url}, now);
+    assert.equal(store.getNote(n.noteId).nextAt, now + 30_000);
+    assert.equal(store.getNote(n.noteId).status, 'retrying');
   } finally { await http.close(); store.close(); }
 });

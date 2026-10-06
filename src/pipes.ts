@@ -1,5 +1,5 @@
 import type { Action, Job, Settings, Secrets, Mapping } from './types.ts';
-import { ajv } from './config.ts';
+import { compileSchema } from './config.ts';
 export class DeliveryFailure extends Error {
   uncertain: boolean;
   constructor(code: string, uncertain: boolean) { super(code); this.uncertain = uncertain; }
@@ -27,7 +27,7 @@ function containsAudio(value: unknown): boolean {
 }
 export function buildWebhookRequest(action: Action, job: Job, settings: Settings, secrets: Secrets): {url: string; init: RequestInit} {
   const pipe = settings.pipes[action.pipeId];
-  if (!pipe || !ajv.compile(pipe.argsSchema)(action.args)) throw new Error('Invalid webhook arguments');
+  if (!pipe || !compileSchema(pipe.argsSchema)(action.args)) throw new Error('Invalid webhook arguments');
   const headers = new Headers(pipe.headers);
   for (const [header, reference] of Object.entries(pipe.authHeaders)) {
     const value = secrets.credentials?.[reference];

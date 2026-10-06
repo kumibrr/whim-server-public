@@ -36,7 +36,7 @@ Bootstrap is read only when the database has no revisions. Editing that file lat
 
 ## Recipes and credentials
 
-Recipes supply `url`, HTTP `method`, public `headers`, credential references in `authHeaders`, an `argsSchema`, and `body: {format, mapping}`. Formats: `json`, `text`, `form` (URL-encoded), `multipart`, and `audio`. Multipart audio fields use `audio/mp4` and `note.m4a`; raw audio requires an audio mapping. GET sends no body. Requests do not follow redirects.
+Recipes supply `url`, HTTP `method`, public `headers`, credential references in `authHeaders`, an `argsSchema`, and `body: {format, mapping}`. Formats: `json`, `text`, `form` (URL-encoded), `multipart`, and `audio`. Multipart audio fields use `audio/mp4` and `note.m4a`; raw audio requires an audio mapping. GET is a fixed trigger with no body: use `format: "json", mapping: {}`; content mappings are rejected. Requests do not follow redirects.
 
 Mapping objects use `{ "source": "args" | "note" | "options", "path": "nested.field" }`, `{ "source": "transcript" }`, `{ "source": "audio" }`, or `{ "source": "literal", "value": ... }`. Nest mappings to build JSON objects/arrays, or a field object for form/multipart. An empty path selects the whole source. Argument schemas support objects, arrays, primitive/nullable types, enums, and descriptions. Objects are closed and all declared properties become required; use nullable fields for optional values. Missing required values fail before any effects.
 

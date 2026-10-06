@@ -3,7 +3,7 @@ import type { Store } from './store.ts';
 import { transcribe, decide, validatePlan, ApiFailure } from './openai.ts';
 import { buildWebhookRequest, sendWebhook, DeliveryFailure } from './pipes.ts';
 import { voiceSettings } from './config.ts';
-export async function processNext(store: Store, secrets: Secrets, now: number, signal?: AbortSignal): Promise<boolean> {
+export async function processNext(store: Store, secrets: Secrets, now: number, signal?: AbortSignal, clock: () => number = Date.now): Promise<boolean> {
   const job = store.claim(now);
   if (!job) return false;
   let stage: 'transcription' | 'decision' | null = null;
@@ -50,7 +50,7 @@ export async function processNext(store: Store, secrets: Secrets, now: number, s
     if (stage && e instanceof ApiFailure) {
       const current = store.getNote(job.noteId);
       const count = stage === 'transcription' ? current.transcriptionAttempts : current.decisionAttempts;
-      if (e.retryable && count < 3) store.hold(job.noteId, 'retrying', e.message, Math.max(now + (count === 1 ? 30_000 : 120_000), e.retryAfter ?? 0));
+      if (e.retryable && count < 3) store.hold(job.noteId, 'retrying', e.message, Math.max(clock() + (count === 1 ? 30_000 : 120_000), e.retryAfter ?? 0));
       else store.hold(job.noteId, 'failed', e.message);
     } else if (activeAction !== null) {
       const uncertain = !(e instanceof DeliveryFailure) || e.uncertain;

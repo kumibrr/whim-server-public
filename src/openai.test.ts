@@ -60,3 +60,15 @@ test('provider failures expose retry metadata, permanent errors, and the file ca
     assert.equal(count, 2);
   } finally { await http.close(); }
 });
+test('interrupted successful response bodies retry; complete malformed JSON is permanent', async () => {
+  let malformed = false;
+  const http = await listen(async (req, res) => {
+    await readBody(req); res.writeHead(200, {'Content-Type': 'application/json'}); res.write('{"text":');
+    if (malformed) res.end(); else setTimeout(() => res.destroy(), 10);
+  });
+  try {
+    await assert.rejects(transcribe(Buffer.from('a'), settings(), 'key', {baseUrl: http.url}), e => e instanceof ApiFailure && e.retryable);
+    malformed = true;
+    await assert.rejects(transcribe(Buffer.from('a'), settings(), 'key', {baseUrl: http.url}), e => e instanceof ApiFailure && !e.retryable);
+  } finally { await http.close(); }
+});

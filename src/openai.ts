@@ -1,26 +1,28 @@
 import type { Settings, Plan, ConfigChange } from './types.ts';
-import { ajv, voicePaths, voiceSettings } from './config.ts';
+import { compileSchema, voicePaths, voiceSettings, planSchema } from './config.ts';
 export class ApiFailure extends Error {
   retryable: boolean; retryAfter: number | undefined;
   constructor(code: string, retryable = false, retryAfter?: number) { super(code); this.retryable = retryable; this.retryAfter = retryAfter; }
 }
 export interface ApiOptions {baseUrl?: string; timeoutMs?: number; signal?: AbortSignal}
-const object = (properties: Record<string, unknown>) => ({type: 'object', properties, required: Object.keys(properties), additionalProperties: false});
-export function planSchema(settings: Settings) {
-  const actions = Object.entries(settings.pipes).map(([id, pipe]) => object({pipeId: {type: 'string', enum: [id]}, args: pipe.argsSchema}));
-  const changes = Object.entries(voicePaths(settings)).map(([path, value]) => object({path: {type: 'string', enum: [path]}, value}));
-  actions.push(object({pipeId: {type: 'string', enum: ['configure']}, args: object({changes: {type: 'array', items: {anyOf: changes}}})}));
-  return object({routing: {type: 'string', enum: ['matched', 'default']}, actions: {type: 'array', items: {anyOf: actions}}});
-}
 export function validatePlan(value: unknown, settings: Settings): Plan {
-  if (!ajv.compile(planSchema(settings))(value)) throw new ApiFailure('Invalid action plan');
+  const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
+  if (!record(value) || Object.keys(value).some(k => !['actions', 'routing'].includes(k)) || !Array.isArray(value.actions)
+    || !['matched', 'default'].includes(value.routing)) throw new ApiFailure('Invalid action plan');
   const result = value as unknown as Plan & {routing: string};
   if (result.actions.length > 32 || (result.routing === 'matched' && !result.actions.length)
     || (result.routing === 'default' && result.actions.length)) throw new ApiFailure('Invalid action plan');
   if (result.routing === 'default') return {actions: [{pipeId: settings.defaultPipeId, args: {}}]};
   let prospective = settings;
   try {
-    for (const action of result.actions) if (action.pipeId === 'configure') prospective = voiceSettings(prospective, action.args.changes as unknown as ConfigChange[]);
+    for (const action of result.actions) {
+      if (!record(action) || Object.keys(action).some(k => !['pipeId', 'args'].includes(k)) || typeof action.pipeId !== 'string'
+        || !record(action.args)) throw new Error();
+      if (action.pipeId === 'configure') {
+        if (Object.keys(action.args).some(k => k !== 'changes')) throw new Error();
+        prospective = voiceSettings(prospective, action.args.changes as unknown as ConfigChange[]);
+      } else if (!Object.hasOwn(settings.pipes, action.pipeId) || !compileSchema(settings.pipes[action.pipeId].argsSchema)(action.args)) throw new Error();
+    }
   } catch { throw new ApiFailure('Invalid configuration proposal'); }
   return {actions: result.actions};
 }
@@ -37,7 +39,8 @@ async function call(path: string, body: BodyInit, key: string, options: ApiOptio
       throw new ApiFailure(`OpenAI HTTP ${response.status}`, [408, 409, 425, 429].includes(response.status) || response.status >= 500,
         Number.isFinite(parsed) && parsed > Date.now() ? parsed : undefined);
     }
-    try { return await response.json(); } catch { throw new ApiFailure('Invalid OpenAI response'); }
+    try { return await response.json(); }
+    catch (e) { throw e instanceof SyntaxError ? new ApiFailure('Invalid OpenAI response') : new ApiFailure('OpenAI response body interrupted', true); }
   } catch (e) { if (e instanceof ApiFailure) throw e; throw new ApiFailure('OpenAI transport failure', true); }
 }
 export async function transcribe(audio: Uint8Array, settings: Settings, key: string, options: ApiOptions = {}): Promise<string> {

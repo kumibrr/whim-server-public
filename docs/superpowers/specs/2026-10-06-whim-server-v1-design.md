@@ -2,7 +2,7 @@
 
 Date: 2026-10-06
 
-Status: Approved by the owner on 2026-10-06. Implementation plan requested.
+Status: Approved by the owner on 2026-10-06; implemented on `feat/openai-server-v1`.
 
 ## Purpose and shape
 
@@ -66,4 +66,4 @@ Ship the server/CLI image, Fly.io configuration, and concise setup, rollback, re
 
 Verify signed uploads and configuration tests, concurrent deduplication, both OpenAI request/response contracts, default routing, all supported webhook formats, hot settings and rollback, restart recovery, uncertain outcomes, cleanup, and the actual container. Use deterministic local fixtures; report live OpenAI checks separately when credentials are supplied.
 
-The previous multi-provider design is superseded. Approval of this shorter specification permits writing a correspondingly small implementation plan.
+The previous multi-provider design is superseded. See the [completed implementation plan](../plans/2026-10-06-whim-server-v1.md) and [setup/recovery instructions](../../../README.md).
