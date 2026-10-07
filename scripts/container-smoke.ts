@@ -5,14 +5,14 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
-import { listen, settings, note, upload, readBody, responsePlan } from '../src/test-fixtures.ts';
+import { listen, settings, note, upload, readBody, decisionAnswers } from '../src/test-fixtures.ts';
 const run = promisify(execFile), dir = mkdtempSync(join(tmpdir(), 'whim-image-'));
 const suffix = `${process.pid}-${Date.now()}`, name = `whim-smoke-${suffix}`, volume = `whim-smoke-${suffix}`;
 const calls: string[] = [];
 const mock = await listen(async (req, res) => {
   await readBody(req); calls.push(req.url!);
   if (req.url === '/hook') { res.writeHead(204).end(); return; }
-  res.end(JSON.stringify(req.url === '/audio/transcriptions' ? {text: 'Container recording'} : responsePlan({routing: 'default', actions: []})));
+  res.end(JSON.stringify(req.url === '/audio/transcriptions' ? {text: 'Container recording'} : decisionAnswers({inbox: 0.1, configure: 0.01})));
 });
 const reserved = await listen((_req, res) => res.end()); const url = reserved.url;
 const port = new URL(url).port; await reserved.close();
@@ -35,7 +35,7 @@ try {
   const n = note(); const accepted = await fetch(url + '/receive', upload(n));
   assert.equal(accepted.status, 200); assert.equal((await accepted.json()).duplicate, false);
   await until(async () => (await (await admin('notes/' + n.noteId)).json()).status === 'succeeded');
-  assert.deepEqual(calls, ['/audio/transcriptions', '/responses', '/hook']);
+  assert.deepEqual(calls, ['/audio/transcriptions', '/decisions', '/hook']);
   const query = `import {DatabaseSync} from 'node:sqlite'; const db=new DatabaseSync('/data/whim.sqlite'); console.log(JSON.stringify(db.prepare('SELECT metadata,audio,transcript,plan FROM notes WHERE note_id=?').get('${n.noteId}'))); db.close();`;
   const stored = JSON.parse((await docker('exec', name, 'node', '--input-type=module', '-e', query)).stdout);
   assert.deepEqual(stored, {metadata: null, audio: null, transcript: null, plan: null});

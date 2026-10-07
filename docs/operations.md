@@ -34,6 +34,16 @@ For Docker bootstrap, add these options to the README's `docker run` command:
 
 The browser keeps the admin token in memory for the session. Its review step lets you edit the settings JSON to add pipes, mappings, and headers. The server includes the wizard in its Docker image, so you don't need a separate frontend service.
 
+## Decisions and argument extraction
+
+Choose transcription, Decisions, and Responses model names available to your OpenAI account. `decisionModel` defaults to `gpt-6-luna` and `decisionThreshold` defaults to `0.8` when omitted, so existing configuration revisions remain valid. The threshold must be greater than zero and at most one. The setup wizard uses these defaults; edit its settings JSON or import a configuration to customize them.
+
+Decisions evaluates a predicate for each webhook pipe and one for explicit, permitted configuration intent. Every answer must be valid and unrefused. Pipes whose probabilities meet the threshold are selected; multiple selections are supported. If none qualify, the server sends the Note to the default destination without a Responses call. Tune the threshold against your own representative Notes; model probabilities are estimates.
+
+Responses extracts required arguments and orders actions only for selected pipes. A result that adds or omits a selection, changes routing, supplies invalid arguments, or proposes a disallowed configuration change fails before effects. Both Decisions settings can be changed through the admin API or a clear spoken configuration command; started Notes keep their pinned revision.
+
+See the official [Decisions guide](https://developers.openai.com/api/docs/guides/decisions), [file transcription guide](https://developers.openai.com/api/docs/guides/speech-to-text), and [Responses Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses).
+
 ## Request recipes and credentials
 
 Each pipe defines a destination URL, HTTP method, public `headers`, credential references in `authHeaders`, an `argsSchema`, and a `body` with `format` and `mapping`. Requests do not follow redirects.
@@ -119,7 +129,7 @@ curl --fail-with-body "$WHIM_SERVER_URL/admin/config" \
 
 ## Recovery and data retention
 
-Retryable OpenAI failures get at most three calls per stage. The server waits 30 seconds before the second call and two minutes before the third. A later `Retry-After` takes precedence. Waiting or failed Notes don't block other eligible work.
+Retryable OpenAI failures get at most three attempts per stage. The server waits 30 seconds before the second attempt and two minutes before the third. A later `Retry-After` takes precedence. Planning combines Decisions and, for selected pipes, Responses: a transient failure in either retries the whole planning stage with pinned settings, so each endpoint is called at most three times. Intermediate selections are not persisted; a saved validated plan is reused. Waiting or failed Notes don't block other eligible work.
 
 Webhook errors have no automatic retries. Retrying a failed Note reuses its saved transcript and plan, and skips successful actions.
 

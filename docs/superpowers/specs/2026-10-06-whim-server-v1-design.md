@@ -12,18 +12,18 @@ Ship one Node 24+/TypeScript process in Docker, with SQLite on one persistent vo
 
 ## The whole flow
 
-`Whim audio → save → OpenAI transcription → OpenAI Responses → execute pipes → delete successful Note content`
+`Whim audio → save → OpenAI transcription → OpenAI Decisions → OpenAI Responses extraction when selected → execute pipes → delete successful Note content`
 
 1. Verify the Whim request and save its audio, metadata, and work record before acknowledging it.
 2. One background worker takes the next eligible Note and pins the current settings revision.
 3. Send the original M4A file to OpenAI's transcription endpoint.
-4. Make one Responses call with the transcript, routing instructions, and available pipes. A schema-constrained result supplies the selected pipe IDs and their arguments, including any proposed settings change. This combines decisions and extraction.
+4. Use Decisions with the transcript and routing instructions to evaluate each provisioned pipe and explicit permitted configuration intent. Select probabilities meeting `decisionThreshold` (default `0.8`), allowing multiple pipes. Refusals or malformed answers fail processing. If none qualify, use the default destination without extraction. Otherwise make one Responses call constrained to selected pipes to extract arguments and order actions, including any proposed settings change. Validate that extraction neither adds nor omits selections.
 5. Validate the whole result, save it, and execute its actions sequentially. Record completed actions so recovery does not repeat them.
 6. After every action succeeds, delete the recording, transcript, metadata, and generated payloads. Retain Note/action identities and operational statuses for deduplication and inspection.
 
 An unclear destination uses the configured default webhook. An unclear settings command never changes configuration. Invalid model output or missing required arguments fails processing before effects; it is not a reason to invent values.
 
-The OpenAI integration uses the documented [file transcription API](https://developers.openai.com/api/docs/guides/speech-to-text) and [Responses Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses). “Decisions API” describes our use of Responses; it is not a separate verified endpoint. Configure the transcription and Responses model names. One provisioned OpenAI API key supplies both calls.
+The owner approved using the now-published [Decisions API](https://developers.openai.com/api/docs/guides/decisions) on 2026-10-07. The integration also uses the documented [file transcription API](https://developers.openai.com/api/docs/guides/speech-to-text) and [Responses Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses). Configure transcription, Decisions, and Responses model names. `decisionModel` defaults to `gpt-6-luna`; existing settings without the Decisions fields remain valid. One provisioned OpenAI API key supplies all calls.
 
 ## Whim compatibility
 
@@ -54,7 +54,7 @@ A small admin API and CLI provide settings import/export, revision history, roll
 
 Save the transcript and chosen actions before effects. Resume saved work after restart and skip completed actions.
 
-Retry transient OpenAI failures up to three total calls, with 30-second and two-minute delays, honoring a later valid `Retry-After`. Permanent errors or exhausted retries retain the Note as failed. Other eligible Notes continue while retries or owner decisions wait.
+Retry transient OpenAI failures up to three attempts per stage, with 30-second and two-minute delays, honoring a later valid `Retry-After`. Decisions and extraction share the planning stage: a failure in either repeats planning with the pinned settings; intermediate selections are not saved. Each endpoint is called at most three times. Permanent errors or exhausted retries retain the Note as failed. Other eligible Notes continue while retries or owner decisions wait.
 
 Record an external action as in flight before sending it. If its response is lost, or the process stops during it, mark it uncertain and preserve its content. Arbitrary webhooks cannot be assumed idempotent: the owner explicitly marks the action delivered or requests a retry. Explicit non-success webhook responses are also inspectable failures rather than automatically repeated effects.
 

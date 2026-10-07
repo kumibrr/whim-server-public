@@ -98,3 +98,19 @@ test('GET trigger recipes reject content-bearing mappings before data can be sil
   s.pipes.inbox.body.mapping = {}; assert.equal(validateSettings(s).pipes.inbox.method, 'GET');
   s.pipes.inbox.body.mapping = {source: 'transcript'}; assert.throws(() => validateSettings(s));
 });
+test('Decisions settings validate and existing configurations remain usable', () => {
+  const base = settings();
+  assert.deepEqual(validateSettings(base), base);
+  assert.equal(validateSettings({...base, decisionModel: 'gpt-6-luna', decisionThreshold: 0.9}).decisionThreshold, 0.9);
+  for (const patch of [{decisionModel: ''}, {decisionModel: null}, {decisionThreshold: 0}, {decisionThreshold: 1.1},
+    {decisionThreshold: '0.8'}, {decisionThreshold: NaN}]) {
+    assert.throws(() => validateSettings({...base, ...patch}));
+  }
+  const next = voiceSettings(base, [{path: 'decisionModel', value: 'gpt-6-luna'}, {path: 'decisionThreshold', value: 0.95}]);
+  const store = openStore(':memory:');
+  try {
+    const first = store.activate(base, 0, 'admin');
+    assert.equal(store.activate(next, first.id, 'voice').settings.decisionThreshold, 0.95);
+    assert.deepEqual(store.rollback(first.id, store.currentRevision().id).settings, base);
+  } finally { store.close(); }
+});

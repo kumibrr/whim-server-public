@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openStore } from './store.ts';
 import { processNext as work } from './process-note.ts';
-import { settings, note, listen, readBody, responsePlan } from './test-fixtures.ts';
+import { settings, note, listen, readBody, responsePlan, decisionAnswers } from './test-fixtures.ts';
 import type { Plan, Secrets } from './types.ts';
 const processNext = (store: ReturnType<typeof openStore>, secrets: Secrets, now: number) => work(store, secrets, now, undefined, () => now);
 const inbox: Plan = {actions: [{pipeId: 'inbox', args: {}}]};
@@ -17,13 +17,14 @@ test('full flow is sequential, durably saved, and purges content while preservin
   const http = await listen(async (req, res) => {
     await readBody(req); calls.push(req.url!);
     if (req.url === '/hook') { res.writeHead(204).end(); return; }
-    res.end(JSON.stringify(req.url === '/audio/transcriptions' ? {text: 'A note'} : responsePlan({routing: 'matched', actions: [...inbox.actions, ...inbox.actions]})));
+    res.end(JSON.stringify(req.url === '/audio/transcriptions' ? {text: 'A note'} : req.url === '/decisions' ? decisionAnswers()
+      : responsePlan({routing: 'matched', actions: [...inbox.actions, ...inbox.actions]})));
   });
   const store = openStore(':memory:');
   try {
     store.activate(settings(http.url + '/hook'), 0, 'admin'); const n = note(); store.accept(n);
     assert.equal(await processNext(store, {openaiKey: 'key', openaiBaseUrl: http.url}, 0), true);
-    assert.deepEqual(calls, ['/audio/transcriptions', '/responses', '/hook', '/hook']);
+    assert.deepEqual(calls, ['/audio/transcriptions', '/decisions', '/responses', '/hook', '/hook']);
     const job = store.getNote(n.noteId); assert.equal(job.status, 'succeeded');
     for (const key of ['audio', 'metadata', 'metadataBytes', 'transcript', 'plan'] as const) assert.equal(job[key], null);
     assert.equal(store.accept(n).duplicate, true); assert.equal(store.actionOutcomes(n.noteId).length, 2);
@@ -125,4 +126,33 @@ test('a slow provider failure starts its retry backoff at failure time', async t
     assert.equal(store.getNote(n.noteId).nextAt, now + 30_000);
     assert.equal(store.getNote(n.noteId).status, 'retrying');
   } finally { await http.close(); store.close(); }
+});
+test('Decisions and extraction share bounded planning retries with pinned settings and no effects', async () => {
+  for (const failedEndpoint of ['/decisions', '/responses']) {
+    const calls: string[] = [], models: string[] = [];
+    const http = await listen(async (req, res) => {
+      const bytes = await readBody(req); calls.push(req.url!);
+      if (req.url === '/hook') { res.writeHead(204).end(); return; }
+      if (req.url !== '/audio/transcriptions') models.push(JSON.parse(bytes.toString()).model);
+      if (req.url === failedEndpoint) { res.writeHead(503).end(); return; }
+      res.end(JSON.stringify(req.url === '/audio/transcriptions' ? {text: 'A note'} : decisionAnswers()));
+    });
+    const store = openStore(':memory:');
+    try {
+      const first = store.activate({...settings(http.url + '/hook'), decisionModel: 'pinned-model'}, 0, 'admin');
+      const n = note(); store.accept(n); const secrets = {openaiKey: 'key', openaiBaseUrl: http.url};
+      await processNext(store, secrets, 0);
+      assert.equal(store.getNote(n.noteId).nextAt, 30_000);
+      store.activate({...first.settings, decisionModel: 'new-model'}, first.id, 'admin');
+      await processNext(store, secrets, 30_000); assert.equal(store.getNote(n.noteId).nextAt, 150_000);
+      await processNext(store, secrets, 150_000);
+      const job = store.getNote(n.noteId);
+      assert.equal(job.status, 'failed'); assert.equal(job.decisionAttempts, 3); assert.equal(job.transcriptionAttempts, 1);
+      assert.equal(job.transcript, 'A note'); assert.ok(job.audio); assert.equal(job.plan, null);
+      assert.equal(calls.filter(path => path === failedEndpoint).length, 3); assert.equal(calls.includes('/hook'), false);
+      assert.equal(models.includes('new-model'), false);
+      assert.deepEqual(models, failedEndpoint === '/decisions' ? ['pinned-model', 'pinned-model', 'pinned-model']
+        : ['pinned-model', 'gpt-4.1-mini', 'pinned-model', 'gpt-4.1-mini', 'pinned-model', 'gpt-4.1-mini']);
+    } finally { await http.close(); store.close(); }
+  }
 });

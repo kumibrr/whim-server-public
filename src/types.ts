@@ -39,6 +39,8 @@ export interface WebhookRecipe {
 export interface Settings {
   transcriptionModel: string;
   responsesModel: string;
+  decisionModel?: string;
+  decisionThreshold?: number;
   instructions: string;
   defaultPipeId: string;
   pipes: Record<string, WebhookRecipe>;
