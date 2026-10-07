@@ -5,6 +5,21 @@ import { createAdminHandler } from './admin.ts';
 import { listen, settings, note, readBody } from './test-fixtures.ts';
 import { startServer } from './server.ts';
 import { setTimeout as delay } from 'node:timers/promises';
+test('empty configuration is readable and first setup uses revision zero with conflict protection', async () => {
+  const store = openStore(':memory:'); const http = await listen(createAdminHandler(store, 'admin'));
+  const req = (method = 'GET', body?: unknown, token = 'admin') => fetch(http.url + '/admin/config', {method,
+    headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
+  try {
+    assert.equal((await req('GET', undefined, 'wrong')).status, 401);
+    const empty = await req(); assert.equal(empty.status, 200);
+    assert.deepEqual(await empty.json(), {id: 0, settings: null});
+    assert.equal((await req('PUT', {settings: {}, expectedRevisionId: 0})).status, 422);
+    assert.equal(store.history().length, 0);
+    assert.equal((await req('PUT', {settings: settings(), expectedRevisionId: 0})).status, 200);
+    assert.equal((await req('PUT', {settings: settings(), expectedRevisionId: 0})).status, 409);
+    assert.equal(store.history().length, 1);
+  } finally { await http.close(); store.close(); }
+});
 test('separate admin authentication, validated import/export, history and rollback', async () => {
   const store = openStore(':memory:'); const first = store.activate(settings(), 0, 'admin');
   const http = await listen(createAdminHandler(store, 'admin'));

@@ -2,6 +2,7 @@ import type { RequestListener, IncomingMessage } from 'node:http';
 import type { Store } from './store.ts';
 import type { Settings } from './types.ts';
 import { equalSecret } from './receiver.ts';
+import { initialSettings, bodyFormats } from './setup.ts';
 class AdminError extends Error {
   status: number;
   constructor(status: number) { super('Admin request rejected'); this.status = status; }
@@ -22,7 +23,11 @@ export function createAdminHandler(store: Store, adminToken: string): RequestLis
       if (typeof req.headers.authorization !== 'string' || !equalSecret(req.headers.authorization, `Bearer ${adminToken}`)) throw new AdminError(401);
       const path = req.url?.split('?')[0], method = req.method;
       let result: unknown;
-      if (path === '/admin/config' && method === 'GET') result = store.currentRevision();
+      if (path === '/admin/config' && method === 'GET') {
+        try { result = store.currentRevision(); }
+        catch (e) { if (!(e instanceof Error) || e.message !== 'Configuration required') throw e; result = {id: 0, settings: null}; }
+      }
+      else if (path === '/admin/config/template' && method === 'GET') result = {settings: initialSettings({url: 'https://example.com/webhook'}), bodyFormats};
       else if (path === '/admin/config' && method === 'PUT') {
         const b = await body(req); result = store.activate(b.settings as Settings, revisionId(b.expectedRevisionId), 'admin');
       } else if (path === '/admin/config/revisions' && method === 'GET') result = store.history();
