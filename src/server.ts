@@ -7,6 +7,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { openStore } from './store.ts';
 import { createReceiver } from './receiver.ts';
 import { createAdminHandler } from './admin.ts';
+import { setupPage, setupCss } from './setup-page.ts';
+import { setupScript } from './setup-script.ts';
 import { processNext } from './process-note.ts';
 import type { Store } from './store.ts';
 import type { Secrets } from './types.ts';
@@ -33,6 +35,13 @@ export async function startServer(env: NodeJS.ProcessEnv): Promise<{url: string;
     const server = createServer((req, res) => {
       if (stopping) { res.writeHead(503, {Connection: 'close'}).end(); return; }
       const route = req.url?.split('?')[0];
+      if (['/setup', '/setup/', '/setup.js', '/setup.css'].includes(route ?? '') && ['GET', 'HEAD'].includes(req.method ?? '')) {
+        const script = route === '/setup.js', css = route === '/setup.css';
+        res.writeHead(200, {'Content-Type': script ? 'text/javascript; charset=utf-8' : css ? 'text/css; charset=utf-8' : 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"});
+        res.end(req.method === 'HEAD' ? undefined : script ? setupScript : css ? setupCss : setupPage); return;
+      }
       if (route === '/healthz' && req.method === 'GET') { res.writeHead(200, {'Content-Type': 'application/json'}).end('{"ok":true}'); return; }
       if (route?.startsWith('/admin/')) admin(req, res); else receive(req, res);
     });
