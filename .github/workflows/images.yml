@@ -3,9 +3,11 @@ name: Publish server images
 on:
   push:
     branches:
-      - feat/openai-server-v1
+      - main
     tags:
       - 'v[0-9]*'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +24,7 @@ jobs:
   publish:
     name: Publish AMD64 and ARM64 image
     needs: checks
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'release' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -52,6 +54,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=ref,event=tag
             type=semver,pattern={{raw}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

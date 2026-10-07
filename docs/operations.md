@@ -186,13 +186,16 @@ For bind-mounted data directories, give the container's `node` user, UID 1000, w
 
 [ci.yml](../.github/workflows/ci.yml) runs tests and type checks, builds the Docker image, and runs the container smoke test against local provider and webhook fixtures. CI needs no OpenAI or destination credentials.
 
-[images.yml](../.github/workflows/images.yml) runs on pushes to `feat/openai-server-v1`, tags matching `v[0-9]*`, and manual dispatch. It reuses the checks before publishing `linux/amd64` and `linux/arm64` images to `ghcr.io/kumibrr/whim-server-public`. Publication permits only the repository's default branch or a `v` tag. Update the push filter if you rename the default branch.
+[images.yml](../.github/workflows/images.yml) runs on pushes to `main`, tags matching `v[0-9]*`, published GitHub releases (including prereleases), and manual dispatch. Draft releases do not trigger publication. It reuses the checks before publishing `linux/amd64` and `linux/arm64` images to `ghcr.io/kumibrr/whim-server-public`. Publication permits a published release, the repository's default branch, or a `v` tag. Update the push filter if you rename the default branch.
 
 | Build | Published tags |
 | --- | --- |
 | Default branch | `latest`, `sha-<full commit SHA>` |
 | Stable `v1.2.3` release | `v1.2.3`, `1.2.3`, `1.2`, `1`, `latest`, commit tag |
 | Prerelease | Full version and commit tags, without changing `latest` or major/minor aliases |
+| Release with a non-semver tag | Release tag and commit tag |
+
+Use a semver prerelease tag such as `v1.2.3-rc.1` for prereleases. Tag pushes and release publication each trigger a build, so publishing a release for an already-pushed `v` tag rebuilds that version.
 
 The publish job summary lists tags and the digest. Publishing uses `GITHUB_TOKEN` with `packages: write`. Actions use pinned commit SHAs. Pull request checks have read-only repository permissions and never publish images.
 
