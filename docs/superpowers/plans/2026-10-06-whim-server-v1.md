@@ -1,5 +1,7 @@
 # Whim Server Implementation Plan
 
+**2026-10-07 amendment:** The owner approved the published Decisions API for routing and Responses for argument extraction. The implemented planning flow evaluates all provisioned pipes plus configuration intent using Decisions, uses the default when none meet the threshold, and restricts Responses to selected pipes. Settings add optional `decisionModel` (default `gpt-6-luna`) and `decisionThreshold` (default `0.8`). Decisions and extraction share the existing pinned, three-attempt planning stage. References below to a single Responses call combining routing and extraction describe the original implementation and are superseded by this amendment and the updated specification.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Ship a small, self-managed Whim server using OpenAI transcription and Responses, configurable webhooks, and recoverable voice configuration.

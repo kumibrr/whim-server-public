@@ -1,5 +1,7 @@
 {
   "transcriptionModel": "gpt-4o-mini-transcribe",
+  "decisionModel": "gpt-6-luna",
+  "decisionThreshold": 0.8,
   "responsesModel": "gpt-4.1-mini",
   "instructions": "Send ordinary notes to inbox. Apply configuration changes only when explicitly and unambiguously requested.",
   "defaultPipeId": "inbox",

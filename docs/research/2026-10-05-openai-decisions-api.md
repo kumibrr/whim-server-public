@@ -1,5 +1,13 @@
 # OpenAI decision-provider research
 
+## Update: Decisions API verified on 2026-10-07
+
+The owner supplied the now-published [Decisions guide](https://developers.openai.com/api/docs/guides/decisions). The official [endpoint reference](https://developers.openai.com/api/reference/resources/decisions/methods/create) documents `POST /v1/decisions`, `gpt-6-luna`, and ordered predicate, choice, and score answers with per-question refusals. Text input is supported; audio is not. Decisions classifies and scores input; Responses Structured Outputs remains appropriate for extracted fields.
+
+The server now transcribes M4A, evaluates one predicate per provisioned pipe plus configuration intent, and selects probabilities at or above the configured threshold (default `0.8`). Responses extracts arguments and orders only selected pipes. No selection uses the default destination directly. Refused or malformed decisions fail before effects. `decisionModel` defaults to `gpt-6-luna`; configurations without either new field remain valid. Local HTTP fixtures cover the request/response contract; no live API compatibility or account-access claim is made.
+
+The sections below preserve the earlier investigation and are superseded where they describe Decisions as unresolved or recommend combining routing and extraction in one Responses call.
+
 Checked 2026-10-05 using the OpenAI Docs skill. Documentation research only; no API requests were made.
 
 ## Requested API identity

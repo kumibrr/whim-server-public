@@ -52,8 +52,11 @@ function validMapping(value: unknown, depth = 0): value is Mapping {
   return Object.values(value).every(v => validMapping(v, depth + 1));
 }
 export function validateSettings(value: unknown): Settings {
-  if (!record(value) || !keys(value, ['transcriptionModel', 'responsesModel', 'instructions', 'defaultPipeId', 'pipes'])
+  if (!record(value) || !keys(value, ['transcriptionModel', 'responsesModel', 'decisionModel', 'decisionThreshold', 'instructions', 'defaultPipeId', 'pipes'])
     || !text(value.transcriptionModel) || !text(value.responsesModel) || typeof value.instructions !== 'string'
+    || (Object.hasOwn(value, 'decisionModel') && !text(value.decisionModel))
+    || (Object.hasOwn(value, 'decisionThreshold') && (typeof value.decisionThreshold !== 'number'
+      || !Number.isFinite(value.decisionThreshold) || value.decisionThreshold <= 0 || value.decisionThreshold > 1))
     || !text(value.defaultPipeId) || !record(value.pipes) || !Object.hasOwn(value.pipes, value.defaultPipeId)) fail();
   const settings = structuredClone(value) as Settings;
   if (Object.keys(settings.pipes).length > 30) fail();
@@ -89,7 +92,8 @@ export function validateSettings(value: unknown): Settings {
 }
 export function voicePaths(base: Settings): Record<string, JsonSchema> {
   const paths: Record<string, JsonSchema> = {instructions: {type: 'string'}, transcriptionModel: {type: 'string'},
-    responsesModel: {type: 'string'}, defaultPipeId: {type: 'string', enum: Object.keys(base.pipes)}};
+    responsesModel: {type: 'string'}, decisionModel: {type: 'string'}, decisionThreshold: {type: 'number'},
+    defaultPipeId: {type: 'string', enum: Object.keys(base.pipes)}};
   for (const [id, pipe] of Object.entries(base.pipes)) for (const k of pipe.mutableOptions)
     paths[`pipes.${id}.options.${k}`] = {type: typeof pipe.options[k] as 'string' | 'number' | 'boolean'};
   return paths;
@@ -112,17 +116,20 @@ export function assertVoiceChange(base: Settings, next: Settings): void {
   for (const path of Object.keys(voicePaths(base))) {
     const parts = path.split('.'); let dest: any = fixed, src: any = base;
     for (const k of parts.slice(0, -1)) { if (!dest?.[k]) fail(); dest = dest[k]; src = src[k]; }
-    dest[parts.at(-1)!] = src[parts.at(-1)!];
+    const key = parts.at(-1)!;
+    if (Object.hasOwn(src, key)) dest[key] = src[key]; else delete dest[key];
   }
   if (!isDeepStrictEqual(fixed, base)) fail();
 }
 
 const object = (properties: Record<string, unknown>) => ({type: 'object', properties, required: Object.keys(properties), additionalProperties: false});
-export function planSchema(settings: Settings) {
-  const actions = Object.entries(settings.pipes).map(([id, pipe]) => object({pipeId: {type: 'string', enum: [id]}, args: pipe.argsSchema}));
+export function planSchema(settings: Settings, selectedPipeIds?: string[]) {
+  const actions = Object.entries(settings.pipes).filter(([id]) => !selectedPipeIds || selectedPipeIds.includes(id))
+    .map(([id, pipe]) => object({pipeId: {type: 'string', enum: [id]}, args: pipe.argsSchema}));
   const changes = Object.entries(voicePaths(settings)).map(([path, value]) => object({path: {type: 'string', enum: [path]}, value}));
-  actions.push(object({pipeId: {type: 'string', enum: ['configure']}, args: object({changes: {type: 'array', items: {anyOf: changes}}})}));
-  return object({routing: {type: 'string', enum: ['matched', 'default']}, actions: {type: 'array', items: {anyOf: actions}}});
+  if (!selectedPipeIds || selectedPipeIds.includes('configure'))
+    actions.push(object({pipeId: {type: 'string', enum: ['configure']}, args: object({changes: {type: 'array', items: {anyOf: changes}}})}));
+  return object({routing: {type: 'string', enum: selectedPipeIds ? ['matched'] : ['matched', 'default']}, actions: {type: 'array', items: {anyOf: actions}}});
 }
 function assertOutputLimits(schema: object): void {
   let properties = 0, enumValues = 0, stringLength = 0;

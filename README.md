@@ -6,14 +6,14 @@
 
 <p align="center">Turn Whim voice Notes into webhook requests.</p>
 
-Whim server receives your recordings, sends them to OpenAI for transcription, and uses the transcript to choose which of your configured webhooks to call. You define the destinations and request formats. The model selects actions and fills in their arguments.
+Whim server receives your recordings, sends them to OpenAI for transcription, and uses Decisions to choose which of your configured webhooks to call. Responses then extracts their arguments. You define the destinations and request formats.
 
 It runs as one Node 24 process with a SQLite database. It's built for one owner. Keep one server instance and put the database on persistent storage.
 
 ## How it works
 
 1. [Whim](https://github.com/kumibrr/whim) sends a Note's audio and metadata to `/receive`.
-2. The server saves the Note, then asks OpenAI to transcribe it and plan the actions.
+2. The server saves the Note, asks OpenAI to transcribe it, selects pipes with Decisions, and extracts arguments with Responses.
 3. The server validates the plan and calls your webhooks in order. If routing is unclear, it uses your default destination.
 4. After every action succeeds, the server deletes the Note's audio, metadata, transcript, and payloads. It keeps operational IDs and statuses.
 
@@ -69,6 +69,8 @@ The image workflow publishes to `ghcr.io/kumibrr/whim-server-public`. To use a p
 
 A pipe is a configured destination the server can call. Each pipe has a request recipe, an argument schema, and a description that helps the model decide when to use it. [config.example.json](config.example.json) shows a complete configuration.
 
+Decisions defaults to `gpt-6-luna` with a `0.8` selection threshold. Existing settings remain valid. See [Decisions and argument extraction](docs/operations.md#decisions-and-argument-extraction) for model settings, multiple destinations, and unclear routing.
+
 Keep destination secrets in the server's `WHIM_CREDENTIALS_JSON` environment variable. Settings contain credential reference names. See [request recipes and credentials](docs/operations.md#request-recipes-and-credentials) for mappings, body formats, and voice permissions.
 
 The CLI uses `WHIM_ADMIN_TOKEN` and defaults to `http://127.0.0.1:8788`. Set `WHIM_SERVER_URL` to administer another server.
@@ -91,4 +93,4 @@ npm run build
 
 Tests use local HTTP fixtures and make no paid API calls. To test the Docker image on a Linux Docker host, build `whim-server:v1` and run `npm run test:container`. That check covers acceptance, processing, cleanup, restart, CLI rollback, and duplicate delivery.
 
-See the [server design](docs/superpowers/specs/2026-10-06-whim-server-v1-design.md) for the processing contract and scope. Receiver attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+See the [server design](docs/superpowers/specs/2026-10-06-whim-server-v1-design.md) for the processing contract and scope, and the official [Decisions guide](https://developers.openai.com/api/docs/guides/decisions) for the API. Live OpenAI verification requires provisioned credentials and is separate from local fixtures. Receiver attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

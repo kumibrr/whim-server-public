@@ -18,6 +18,11 @@ export async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks = []; for await (const chunk of req) chunks.push(chunk); return Buffer.concat(chunks);
 }
 export const responsePlan = (value: unknown) => ({status: 'completed', output: [{type: 'message', content: [{type: 'output_text', text: JSON.stringify(value)}]}]});
+export const decisionAnswers = (probabilities: Record<string, number> = {inbox: 0.99, configure: 0.01}) => ({
+  model: 'gpt-6-luna', answers: Object.entries(probabilities).map(([name, probability]) => ({type: 'predicate', name, probability})),
+  usage: {input_tokens: 42, input_tokens_details: {cached_tokens: 0, cache_write_tokens: 0},
+    output_tokens: 0, output_tokens_details: {reasoning_tokens: 0}, total_tokens: 42}
+});
 export function note(overrides: Record<string, unknown> = {}): IncomingNote {
   const noteId = randomUUID(), attemptId = randomUUID(), audio = Buffer.from([0, 1, 255, 3]);
   const metadata = {schema_version: 1, event: 'note.created', note_id: noteId, attempt_id: attemptId,
